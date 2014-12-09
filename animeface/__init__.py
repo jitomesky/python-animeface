@@ -78,11 +78,16 @@ class Face(object):
             'chin=%(chin)r ') % self.__dict__
 
 
-def detect(im):
+def detect(im,
+    analyze=True,
+    step=4.0,
+    scale_factor=1.095,
+    min_window_size=42.592):
   """Detects anime faces.
 
   Args:
     im: PIL.Image object.
+    analyze (bool): analyze facial features if True.
 
   Returns:
     A list of Face.
@@ -95,5 +100,9 @@ def detect(im):
     im = im.convert('RGB')
   else:
     raise ValueError('Unsupported color mode: %s' % im.mode)
-  results = _nvxs.detect(im.getdata())
+  results = _nvxs.detect(im.getdata(),
+    analyze,
+    step,
+    scale_factor,
+    min_window_size)
   return [Face(result) for result in results]

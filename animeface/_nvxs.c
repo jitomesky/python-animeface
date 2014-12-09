@@ -23,6 +23,8 @@
 #include "nv_ml.h"
 #include "nv_face.h"
 
+#include "detect.h"
+
 #define NV_MAX_FACE 4096
 
 #define NV_C2V(x) ((float)((unsigned int)x))
@@ -68,8 +70,12 @@ static void convert_imaging_to_nv(
 static int do_detect(
     nv_matrix_t* bgr,
     nv_matrix_t* gray,
-    nv_face_position_t* faces,
-    int num_max_faces) {
+    animeface_position_t* faces,
+    int num_max_faces,
+    int find_parts,
+    float step,
+    float scale_factor,
+    float min_window_size) {
   static const nv_mlp_t* detector_mlp = &nv_face_mlp_face_00;
   static const nv_mlp_t* face_mlp[] = {
     &nv_face_mlp_face_01,
@@ -101,7 +107,7 @@ static int do_detect(
   image_size.width = bgr->cols;
   image_size.height = bgr->rows;
 
-  num_faces = nv_face_detect(
+  num_faces = animeface_detect(
       faces,
       num_max_faces,
       gray_integral,
@@ -111,10 +117,10 @@ static int do_detect(
       detector_mlp,
       face_mlp,
       2,
-      parts_mlp,
-      4.0,    /* step */
-      1.095,  /* scale_factor */
-      42.592  /* min_window_size */);
+      find_parts ? parts_mlp : NULL,
+      step,
+      scale_factor,
+      min_window_size);
 
   nv_matrix_free(&smooth);
   nv_matrix_free(&edge);
@@ -125,17 +131,20 @@ static int do_detect(
 }
 
 static PyObject* pack_results(
-    nv_face_position_t* faces,
+    animeface_position_t* faces,
     int num_faces,
-    nv_matrix_t* bgr) {
+    nv_matrix_t* bgr,
+    int analyze) {
   PyObject* result = PyList_New(num_faces);
   int i;
 
   for (i = 0; i < num_faces; ++i) {
     PyObject* one_result = PyDict_New();
-    nv_face_position_t* face = &faces[i];
+    animeface_position_t* face = &faces[i];
     nv_face_feature_t face_feature = {0};
-    nv_face_analyze(&face_feature, face, bgr);
+    if (analyze) {
+      nv_face_analyze(&face_feature, face, bgr);
+    }
 
     PyDict_SetItemString(
         one_result, "likelihood",
@@ -215,12 +224,17 @@ static PyObject* detect(
   PyObject* result;
   ImagingObject* imobj;
   Imaging im;
+  PyObject* analyze;
+  float step;
+  float scale_factor;
+  float min_window_size;
   int num_faces;
   nv_matrix_t* bgr;
   nv_matrix_t* gray;
-  nv_face_position_t faces[NV_MAX_FACE];
+  animeface_position_t faces[NV_MAX_FACE];
 
-  if (!PyArg_ParseTuple(args, "O", &imobj)) {
+  if (!PyArg_ParseTuple(args, "OOfff", &imobj, &analyze,
+      &step, &scale_factor, &min_window_size)) {
     return NULL;
   }
   im = imobj->image;
@@ -232,9 +246,11 @@ static PyObject* detect(
 
   convert_imaging_to_nv(im, bgr, gray);
 
-  num_faces = do_detect(bgr, gray, faces, NV_MAX_FACE);
+  num_faces = do_detect(bgr, gray, faces, NV_MAX_FACE,
+    PyObject_IsTrue(analyze),
+    step, scale_factor, min_window_size);
 
-  result = pack_results(faces, num_faces, bgr);
+  result = pack_results(faces, num_faces, bgr, PyObject_IsTrue(analyze));
 
   nv_matrix_free(&bgr);
   nv_matrix_free(&gray);

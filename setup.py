@@ -19,7 +19,10 @@ from setuptools import setup, Extension
 
 module1 = Extension(
     'animeface._nvxs',
-    sources=['animeface/_nvxs.c'],
+    sources=[
+        'animeface/_nvxs.c',
+        'animeface/detect.c',
+    ],
     libraries=['nvxs'])
 
 setup(
