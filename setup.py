@@ -34,5 +34,5 @@ setup(
     description='A library to detect anime faces in images.',
     ext_modules=[module1],
     packages=['animeface'],
-    install_requires=['PIL'],
+    install_requires=['pillow'],
     )
