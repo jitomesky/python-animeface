@@ -258,11 +258,63 @@ static PyObject* detect(
   return result;
 }
 
+struct module_state {
+    PyObject *error;
+};
+
+#define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
+
+static PyObject *
+error_out(PyObject *m) {
+    struct module_state *st = GETSTATE(m);
+    PyErr_SetString(st->error, "something bad happened");
+    return NULL;
+}
+
 static PyMethodDef methods[] = {
   {"detect", (PyCFunction)detect, METH_VARARGS, NULL},
+  {"error_out", (PyCFunction)error_out, METH_NOARGS, NULL},
   {NULL, NULL, 0, NULL}
 };
 
-PyMODINIT_FUNC init_nvxs(void) {
-  Py_InitModule("animeface._nvxs", methods);
+static int nvxs_traverse(PyObject *m, visitproc visit, void *arg) {
+    Py_VISIT(GETSTATE(m)->error);
+    return 0;
+}
+
+static int nvxs_clear(PyObject *m) {
+    Py_CLEAR(GETSTATE(m)->error);
+    return 0;
+}
+
+
+static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "animeface._nvxs",
+        NULL,
+        sizeof(struct module_state),
+        methods,
+        NULL,
+        nvxs_traverse,
+        nvxs_clear,
+        NULL
+};
+
+#define INITERROR return NULL
+
+PyMODINIT_FUNC
+PyInit__nvxs(void) {
+  PyObject *module = PyModule_Create(&moduledef);
+
+    if (module == NULL)
+        INITERROR;
+    struct module_state *st = GETSTATE(module);
+
+    st->error = PyErr_NewException("myextension.Error", NULL, NULL);
+    if (st->error == NULL) {
+        Py_DECREF(module);
+        INITERROR;
+    }
+
+    return module;
 }
